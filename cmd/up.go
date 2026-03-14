@@ -26,12 +26,19 @@ var upCmd = &cobra.Command{
 	Short: "Provision if needed and deploy application",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		logVerbose("starting up flow with config=%s provision-only=%t wait-timeout=%s", cfgFile, upProvisionOnly, upWaitTimeout)
-		cfg, err := config.Load(cfgFile)
+		cfg, bootstrap, err := loadOrBootstrapConfigForUp(cfgFile)
 		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				return wrapUserError("load config", fmt.Errorf("config %q not found; run `upcloud-box init`, edit it, then rerun `upcloud-box up`", cfgFile))
-			}
 			return wrapUserError("load config", err)
+		}
+
+		if bootstrap.ConfigCreated {
+			fmt.Printf("Up: config %s not found, generated it with defaults\n", cfgFile)
+			if bootstrap.CloudInitCreated {
+				fmt.Printf("Up: generated %s\n", bootstrap.CloudInitPath)
+			} else {
+				fmt.Printf("Up: using existing %s\n", bootstrap.CloudInitPath)
+			}
+			fmt.Println("Up: continuing with generated defaults; edit config and rerun later if needed")
 		}
 
 		s, err := loadOrInitState(state.DefaultPath)
@@ -74,6 +81,69 @@ var upCmd = &cobra.Command{
 		fmt.Println("Up complete")
 		return nil
 	},
+}
+
+type upBootstrapResult struct {
+	ConfigCreated    bool
+	CloudInitCreated bool
+	CloudInitPath    string
+}
+
+func loadOrBootstrapConfigForUp(path string) (*config.Config, upBootstrapResult, error) {
+	cfg, err := config.Load(path)
+	if err == nil {
+		return cfg, upBootstrapResult{}, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, upBootstrapResult{}, err
+	}
+
+	bootstrap, err := bootstrapUpDefaults(path)
+	if err != nil {
+		return nil, upBootstrapResult{}, err
+	}
+
+	cfg, err = config.Load(path)
+	if err != nil {
+		return nil, upBootstrapResult{}, err
+	}
+
+	return cfg, bootstrap, nil
+}
+
+func bootstrapUpDefaults(path string) (upBootstrapResult, error) {
+	defaultCfg := config.Default()
+	cloudInitPath := strings.TrimSpace(defaultCfg.Provision.CloudInitPath)
+	if cloudInitPath == "" {
+		return upBootstrapResult{}, fmt.Errorf("default cloud-init path is empty")
+	}
+
+	if err := writeConfig(path, cloudInitPath, false); err != nil {
+		return upBootstrapResult{}, err
+	}
+
+	result := upBootstrapResult{
+		ConfigCreated: true,
+		CloudInitPath: cloudInitPath,
+	}
+
+	if _, err := os.Stat(cloudInitPath); err == nil {
+		return result, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return upBootstrapResult{}, fmt.Errorf("check cloud-init file %q: %w", cloudInitPath, err)
+	}
+
+	keys, err := resolveSSHAuthorizedKeys(nil, path)
+	if err != nil {
+		return upBootstrapResult{}, err
+	}
+
+	if err := writeCloudInit(cloudInitPath, defaultCfg.SSH.User, keys, false); err != nil {
+		return upBootstrapResult{}, err
+	}
+
+	result.CloudInitCreated = true
+	return result, nil
 }
 
 func init() {

@@ -28,13 +28,21 @@ Quickstart:
 export UPCLOUD_TOKEN="ucat_..."
 ```
 
-2) Initialize project files:
+2) Put your stack in `docker-compose.yaml` (or `compose.yaml`) in the project root.
+
+3) Run full runtime flow:
 
 ```bash
-upcloud-box init
+upcloud-box up
 ```
 
-`upcloud-box init` auto-detects `~/.ssh/id_ed25519.pub`, then `~/.ssh/id_ecdsa.pub`, then `~/.ssh/id_rsa.pub` when `--ssh-key` is not provided.
+On first run, `upcloud-box up` bootstraps `upcloud-box.yaml` automatically (and creates `cloud-init.yaml` if it does not already exist), then continues provisioning/deploy.
+
+SSH key behavior:
+
+- If `ssh.private_key_path` is empty, upcloud-box auto-detects `~/.ssh/id_ed25519`, then `~/.ssh/id_ecdsa`, then `~/.ssh/id_rsa`.
+- `cloud-init.yaml` key material is auto-detected from `.pub` keys in the same order when possible.
+- If `ssh.private_key_path` is explicitly set to an invalid path, commands fail fast.
 
 This creates:
 
@@ -42,24 +50,16 @@ This creates:
 - `.upcloud-box.state.json`
 - `cloud-init.yaml`
 
-3) Put your stack in `docker-compose.yaml` (or `compose.yaml`) in the project root.
-
-4) Run full runtime flow:
-
-```bash
-upcloud-box up
-```
-
 `upcloud-box up` provisions the server if needed, then deploys your Docker stack automatically.
 If no compose file is found, it falls back to single-container settings in `upcloud-box.yaml`.
 
-5) Inspect status:
+4) Inspect status:
 
 ```bash
 upcloud-box status
 ```
 
-6) Clean up:
+5) Clean up:
 
 ```bash
 upcloud-box destroy --yes
@@ -69,7 +69,7 @@ This removes the tracked server and clears local infra state.
 
 Core commands:
 
-- `upcloud-box init` - scaffold config/state/cloud-init
+- `upcloud-box init` - optional manual scaffold for config/state/cloud-init
 - `upcloud-box provision` - create server and persist infra state
 - `upcloud-box deploy` - deploy your Docker stack (or single-container fallback)
 - `upcloud-box up` - provision if needed, then deploy your stack
