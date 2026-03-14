@@ -11,3 +11,10 @@ devenv.local.yaml
 
 # build artifacts
 upcloud-box
+
+# local runtime files
+.upcloud-box.state.json
+upcloud-box.yaml
+
+# local secrets
+.env.prod
