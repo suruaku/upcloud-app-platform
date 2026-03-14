@@ -127,6 +127,55 @@ func (r *Runner) Run(ctx context.Context, host, remoteCommand string) (Result, e
 	return r.runOnce(ctx, host, remoteCommand)
 }
 
+func (r *Runner) UploadFile(ctx context.Context, host, localPath, remotePath string) error {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return fmt.Errorf("ssh host is required")
+	}
+
+	localPath = strings.TrimSpace(localPath)
+	if localPath == "" {
+		return fmt.Errorf("local path is required")
+	}
+
+	remotePath = strings.TrimSpace(remotePath)
+	if remotePath == "" {
+		return fmt.Errorf("remote path is required")
+	}
+
+	if _, err := os.Stat(localPath); err != nil {
+		return fmt.Errorf("local file %q: %w", localPath, err)
+	}
+
+	connectSeconds := int(r.connectTimeout / time.Second)
+	if connectSeconds < 1 {
+		connectSeconds = 1
+	}
+
+	args := []string{
+		"-o", "BatchMode=yes",
+		"-o", "StrictHostKeyChecking=accept-new",
+		"-o", fmt.Sprintf("ConnectTimeout=%d", connectSeconds),
+		"-i", r.privateKeyPath,
+		localPath,
+		fmt.Sprintf("%s@%s:%s", r.user, host, remotePath),
+	}
+
+	cmd := exec.CommandContext(ctx, "scp", args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		errText := strings.TrimSpace(stderr.String())
+		if errText == "" {
+			errText = strings.TrimSpace(err.Error())
+		}
+		return fmt.Errorf("upload file %q to %s:%s: %s", localPath, host, remotePath, errText)
+	}
+
+	return nil
+}
+
 func (r *Runner) runOnce(ctx context.Context, host, remoteCommand string) (Result, error) {
 	connectSeconds := int(r.connectTimeout / time.Second)
 	if connectSeconds < 1 {

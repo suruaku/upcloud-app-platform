@@ -204,6 +204,15 @@ func runDeployFlow(cfg *config.Config, s *state.State) error {
 		return wrapUserError("validate state", fmt.Errorf("state has no server_uuid; run `upcloud-box provision` first"))
 	}
 
+	mode, composePath, composeFileName, err := detectDeployMode(cfgFile)
+	if err != nil {
+		return wrapUserError("detect deploy mode", err)
+	}
+
+	if mode == deployModeCompose && hasLikelySingleDeploySettings(cfg) {
+		fmt.Println("Compose file detected; using compose mode (single-container settings ignored).")
+	}
+
 	runner, err := sshrunner.NewRunner(sshrunner.Config{
 		User:           cfg.SSH.User,
 		PrivateKeyPath: cfg.SSH.PrivateKeyPath,
@@ -218,6 +227,33 @@ func runDeployFlow(cfg *config.Config, s *state.State) error {
 	deployer, err := deployrunner.New(runner)
 	if err != nil {
 		return wrapUserError("initialize deployer", err)
+	}
+
+	if mode == deployModeCompose {
+		fmt.Println("Up: deploying compose stack...")
+		if err := runStep("Deploying compose stack and running health checks...", "Compose deploy completed successfully", func() error {
+			return deployer.RunCompose(context.Background(), deployrunner.ComposeRequest{
+				Host:                host,
+				ComposeLocalPath:    composePath,
+				ComposeFileName:     composeFileName,
+				RemoteDir:           remoteComposeDir(cfg.Project),
+				HealthcheckURL:      cfg.Deploy.HealthcheckURL,
+				HealthcheckTimeout:  time.Duration(cfg.Deploy.HealthcheckTimeoutSecs) * time.Second,
+				HealthcheckInterval: time.Duration(cfg.Deploy.HealthcheckIntervalSecs) * time.Second,
+			})
+		}); err != nil {
+			return wrapUserError("deploy compose stack", err)
+		}
+
+		s.LastSuccessfulImage = ""
+		s.MarkDeployAt(time.Now())
+		s.LastDeployMode = string(deployModeCompose)
+		if err := state.Save(state.DefaultPath, *s); err != nil {
+			return wrapUserError("save state", err)
+		}
+
+		fmt.Printf("Deployed compose file %s to %s\n", composeFileName, host)
+		return nil
 	}
 
 	fmt.Println("Up: deploying container...")
@@ -237,6 +273,7 @@ func runDeployFlow(cfg *config.Config, s *state.State) error {
 	}
 
 	s.MarkDeploy(cfg.Deploy.Image, time.Now())
+	s.LastDeployMode = string(deployModeSingle)
 	if err := state.Save(state.DefaultPath, *s); err != nil {
 		return wrapUserError("save state", err)
 	}

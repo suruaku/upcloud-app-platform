@@ -16,6 +16,7 @@ type State struct {
 	PublicIP            string `json:"public_ip"`
 	LastSuccessfulImage string `json:"last_successful_image"`
 	LastDeployedAt      string `json:"last_deployed_at"`
+	LastDeployMode      string `json:"last_deploy_mode"`
 }
 
 func New() State {
@@ -60,6 +61,10 @@ func Save(path string, s State) error {
 
 func (s *State) MarkDeploy(image string, t time.Time) {
 	s.LastSuccessfulImage = image
+	s.LastDeployedAt = t.UTC().Format(time.RFC3339)
+}
+
+func (s *State) MarkDeployAt(t time.Time) {
 	s.LastDeployedAt = t.UTC().Format(time.RFC3339)
 }
 

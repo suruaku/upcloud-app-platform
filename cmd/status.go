@@ -34,6 +34,7 @@ var statusCmd = &cobra.Command{
 		fmt.Printf("public_ip: %s\n", renderOrDash(s.PublicIP))
 		fmt.Printf("last_successful_image: %s\n", renderOrDash(s.LastSuccessfulImage))
 		fmt.Printf("last_deployed_at: %s\n", renderOrDash(s.LastDeployedAt))
+		fmt.Printf("last_deploy_mode: %s\n", renderOrDash(s.LastDeployMode))
 
 		if strings.TrimSpace(s.ServerUUID) == "" {
 			fmt.Println("Remote infra: none tracked")
@@ -113,6 +114,11 @@ func renderRemoteAppSummary(s *state.State, remoteIPv4 string) {
 	}
 
 	containerName := strings.TrimSpace(cfg.Deploy.ContainerName)
+	if strings.TrimSpace(s.LastDeployMode) == string(deployModeCompose) {
+		renderRemoteComposeSummary(runner, host, cfg)
+		return
+	}
+
 	if containerName == "" {
 		fmt.Println("Remote app: skipped (deploy.container_name is empty)")
 		return
@@ -156,6 +162,67 @@ func renderRemoteAppSummary(s *state.State, remoteIPv4 string) {
 	if healthErr != "" {
 		fmt.Printf("health_error: %s\n", healthErr)
 	}
+}
+
+func renderRemoteComposeSummary(runner *sshrunner.Runner, host string, cfg *config.Config) {
+	mode, _, composeFileName, err := detectDeployMode(cfgFile)
+	if err != nil {
+		fmt.Printf("Remote app: skipped (detect deploy mode: %v)\n", err)
+		return
+	}
+	if mode != deployModeCompose {
+		fmt.Println("Remote app: compose mode recorded in state, but no compose file in config directory")
+		return
+	}
+
+	remoteDir := remoteComposeDir(cfg.Project)
+	remoteComposePath := filepath.ToSlash(filepath.Join(remoteDir, composeFileName))
+	cmd := fmt.Sprintf("cd %s && docker compose -f %s ps --format '{{.Service}}|{{.State}}|{{.Health}}'", shellQuote(remoteDir), shellQuote(remoteComposePath))
+	result, err := runner.Run(context.Background(), host, cmd)
+	if err != nil {
+		fmt.Printf("Remote app: compose status unavailable (%v)\n", err)
+		return
+	}
+
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
+		fmt.Printf("Remote app: compose stack %q has no services\n", composeFileName)
+		return
+	}
+
+	fmt.Printf("Remote app: compose stack %s\n", composeFileName)
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 3)
+		service := "-"
+		stateLabel := "-"
+		health := "-"
+		if len(parts) > 0 {
+			service = renderOrDash(parts[0])
+		}
+		if len(parts) > 1 {
+			stateLabel = renderOrDash(parts[1])
+		}
+		if len(parts) > 2 {
+			health = renderOrDash(parts[2])
+		}
+		fmt.Printf("service %s: state=%s health=%s\n", service, stateLabel, health)
+	}
+
+	if strings.TrimSpace(cfg.Deploy.HealthcheckURL) == "" {
+		return
+	}
+
+	if _, err := runner.Run(context.Background(), host, fmt.Sprintf("curl -fsS --max-time 5 %s >/dev/null", shellQuote(cfg.Deploy.HealthcheckURL))); err == nil {
+		fmt.Printf("health_url: %s\n", renderOrDash(cfg.Deploy.HealthcheckURL))
+		fmt.Println("health: healthy")
+		return
+	}
+
+	fmt.Printf("health_url: %s\n", renderOrDash(cfg.Deploy.HealthcheckURL))
+	fmt.Println("health: unhealthy")
 }
 
 func shellQuote(s string) string {

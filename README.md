@@ -48,6 +48,10 @@ This creates:
 upcloud-box up
 ```
 
+If `docker-compose.yaml` or `compose.yaml` exists in the same directory as your config file,
+`upcloud-box up` deploys that compose stack automatically.
+Otherwise it deploys the single-container settings from `upcloud-box.yaml`.
+
 5) Inspect status:
 
 ```bash
@@ -64,8 +68,8 @@ Core commands:
 
 - `upcloud-box init` - scaffold config/state/cloud-init
 - `upcloud-box provision` - create server and persist infra state
-- `upcloud-box deploy` - deploy container and update deploy state
-- `upcloud-box up` - provision if needed, then deploy
+- `upcloud-box deploy` - deploy container settings or detected compose stack
+- `upcloud-box up` - provision if needed, then deploy (auto-detect compose at repo root)
 - `upcloud-box status` - local state + remote infra/container/health summary
 - `upcloud-box destroy` - delete tracked server and clear infra state fields
 
