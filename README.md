@@ -2,23 +2,25 @@
 
 `upcloud-box` is a Go CLI for provisioning one secure Docker host on UpCloud and deploying one container workload.
 
-## Features
+## Install
 
-- Initialize config, state, and cloud-init templates
-- Provision an UpCloud server with cloud-init
-- Verify SSH and Docker readiness after provisioning
-- Deploy a single container with health checks and rollback
-- Show infra + container + health status
-- Destroy tracked server and clean local infra state
-- One-command runtime flow with `up` (provision if needed, then deploy)
+Install with Homebrew (macOS arm64):
 
-## Requirements
+```bash
+brew tap suruaku/tap
+brew install upcloud-box
+```
 
-- Go 1.25+ (for local development)
+Homebrew installation also sets up shell completions automatically.
+
+## Use
+
+Requirements:
+
 - UpCloud account and API token
 - Local SSH keypair (public key for cloud-init, private key for SSH access)
 
-## Quickstart
+Quickstart:
 
 1) Export your UpCloud token:
 
@@ -58,7 +60,7 @@ upcloud-box status
 upcloud-box destroy --yes
 ```
 
-## Core Commands
+Core commands:
 
 - `upcloud-box init` - scaffold config/state/cloud-init
 - `upcloud-box provision` - create server and persist infra state
@@ -67,20 +69,11 @@ upcloud-box destroy --yes
 - `upcloud-box status` - local state + remote infra/container/health summary
 - `upcloud-box destroy` - delete tracked server and clear infra state fields
 
-## Useful Flags
+Useful flags:
 
 - `--config <path>`: custom config path (default: `upcloud-box.yaml`)
 - `--verbose`: show detailed error output and verbose logs
 - `--no-spinner`: disable spinner progress output
-
-## Install with Homebrew (macOS arm64)
-
-```bash
-brew tap suruaku/tap
-brew install upcloud-box
-```
-
-Homebrew installation also sets up shell completions automatically.
 
 ## Troubleshooting
 
@@ -90,16 +83,27 @@ Homebrew installation also sets up shell completions automatically.
 - `deploy container failed (health)`: verify app startup, exposed port mapping, and `deploy.healthcheck_url`.
 - `status` shows server missing: run `upcloud-box up` to reprovision or `upcloud-box destroy --yes` to clean state.
 
-## Release Artifacts
+## Development
 
-On version tags (`v*`), GitHub Actions builds and publishes binaries for:
+Requirements:
+
+- Go 1.25+
+
+Local workflow:
+
+```bash
+go test ./...
+go build ./...
+```
+
+## Release
+
+Release artifacts are published on version tags (`v*`) for:
 
 - Linux: amd64, arm64
 - macOS: arm64
 
-## Release Process
-
-Follow this checklist for each new release:
+Release checklist:
 
 1) Prepare and merge changes to `master`.
 2) Create and push a version tag:
@@ -110,7 +114,7 @@ git push origin v1.0.1
 ```
 
 3) Wait for GitHub Actions:
-- `Release` workflow publishes binaries + checksums to the GitHub Release.
+- `Release` workflow publishes binaries and checksums to the GitHub Release.
 - `Update Homebrew Tap` workflow opens a PR in `suruaku/homebrew-tap`.
 
 4) Merge the Homebrew tap PR.
@@ -124,5 +128,6 @@ upcloud-box --version
 ```
 
 Notes:
+
 - Version tags must match `v*` (for example `v1.0.1`).
 - Ensure `HOMEBREW_TAP_TOKEN` is configured in this repo's Actions secrets.
