@@ -128,10 +128,10 @@ func Default() Config {
 		},
 		Deploy: DeployConfig{
 			ContainerName:           "my-app",
-			Image:                   "ghcr.io/acme/my-app:latest",
-			Port:                    "80:8080",
+			Image:                   "nginxdemos/hello:latest",
+			Port:                    "80:80",
 			EnvFile:                 ".env.prod",
-			HealthcheckURL:          "http://localhost:8080/health",
+			HealthcheckURL:          "http://localhost/",
 			HealthcheckTimeoutSecs:  60,
 			HealthcheckIntervalSecs: 3,
 		},
