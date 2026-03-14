@@ -86,5 +86,4 @@ upcloud-box destroy --yes
 On version tags (`v*`), GitHub Actions builds and publishes binaries for:
 
 - Linux: amd64, arm64
-- macOS: amd64, arm64
-- Windows: amd64
+- macOS: arm64

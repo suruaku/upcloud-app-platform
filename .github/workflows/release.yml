@@ -21,14 +21,8 @@ jobs:
             goarch: arm64
             ext: tar.gz
           - goos: darwin
-            goarch: amd64
-            ext: tar.gz
-          - goos: darwin
             goarch: arm64
             ext: tar.gz
-          - goos: windows
-            goarch: amd64
-            ext: zip
 
     steps:
       - name: Checkout
