@@ -80,6 +80,8 @@ brew tap suruaku/tap
 brew install upcloud-box
 ```
 
+Homebrew installation also sets up shell completions automatically.
+
 ## Troubleshooting
 
 - `initialize provider failed (auth)`: verify `UPCLOUD_TOKEN` is set and valid.
@@ -94,3 +96,33 @@ On version tags (`v*`), GitHub Actions builds and publishes binaries for:
 
 - Linux: amd64, arm64
 - macOS: arm64
+
+## Release Process
+
+Follow this checklist for each new release:
+
+1) Prepare and merge changes to `master`.
+2) Create and push a version tag:
+
+```bash
+git tag -a v1.0.1 -m "v1.0.1"
+git push origin v1.0.1
+```
+
+3) Wait for GitHub Actions:
+- `Release` workflow publishes binaries + checksums to the GitHub Release.
+- `Update Homebrew Tap` workflow opens a PR in `suruaku/homebrew-tap`.
+
+4) Merge the Homebrew tap PR.
+
+5) Verify install/upgrade:
+
+```bash
+brew update
+brew upgrade upcloud-box
+upcloud-box --version
+```
+
+Notes:
+- Version tags must match `v*` (for example `v1.0.1`).
+- Ensure `HOMEBREW_TAP_TOKEN` is configured in this repo's Actions secrets.
