@@ -73,6 +73,13 @@ upcloud-box destroy --yes
 - `--verbose`: show detailed error output and verbose logs
 - `--no-spinner`: disable spinner progress output
 
+## Install with Homebrew (macOS arm64)
+
+```bash
+brew tap suruaku/tap
+brew install upcloud-box
+```
+
 ## Troubleshooting
 
 - `initialize provider failed (auth)`: verify `UPCLOUD_TOKEN` is set and valid.
