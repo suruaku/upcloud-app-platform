@@ -117,6 +117,14 @@ func resolveSSHAuthorizedKeys(paths []string, cfgPath string) ([]string, error) 
 		}
 	}
 
+	autoDetectedPublicPath, err := detectDefaultPublicKeyPath()
+	if err != nil {
+		return nil, err
+	}
+	if autoDetectedPublicPath != "" {
+		return readSSHAuthorizedKeys([]string{autoDetectedPublicPath})
+	}
+
 	return []string{"ssh-ed25519 REPLACE_ME_WITH_A_REAL_PUBLIC_KEY upcloud-box"}, nil
 }
 
@@ -170,6 +178,25 @@ func inferPublicKeyPathFromConfig(cfgPath string) string {
 	}
 
 	return filepath.Clean(candidate)
+}
+
+func detectDefaultPublicKeyPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home dir for ssh key detection: %w", err)
+	}
+
+	candidates := []string{"id_ed25519.pub", "id_ecdsa.pub", "id_rsa.pub"}
+	for _, name := range candidates {
+		candidate := filepath.Join(home, ".ssh", name)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("check ssh key file %q: %w", candidate, err)
+		}
+	}
+
+	return "", nil
 }
 
 func buildCloudInit(path, user string, sshKeys []string) []byte {

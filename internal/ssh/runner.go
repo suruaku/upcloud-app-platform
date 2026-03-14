@@ -38,13 +38,26 @@ func NewRunner(cfg Config) (*Runner, error) {
 		return nil, fmt.Errorf("ssh user is required")
 	}
 
-	keyPath, err := resolvePath(cfg.PrivateKeyPath, cfg.ConfigDir)
-	if err != nil {
-		return nil, fmt.Errorf("resolve ssh private key path: %w", err)
-	}
-
-	if _, err := os.Stat(keyPath); err != nil {
-		return nil, fmt.Errorf("ssh private key path %q: %w", keyPath, err)
+	var keyPath string
+	privateKeyPath := strings.TrimSpace(cfg.PrivateKeyPath)
+	if privateKeyPath != "" {
+		resolvedKeyPath, err := resolvePath(privateKeyPath, cfg.ConfigDir)
+		if err != nil {
+			return nil, fmt.Errorf("resolve ssh private key path: %w", err)
+		}
+		if _, err := os.Stat(resolvedKeyPath); err != nil {
+			return nil, fmt.Errorf("ssh private key path %q: %w", resolvedKeyPath, err)
+		}
+		keyPath = resolvedKeyPath
+	} else {
+		detectedKeyPath, attempted, err := detectPrivateKeyPath()
+		if err != nil {
+			return nil, err
+		}
+		if detectedKeyPath == "" {
+			return nil, fmt.Errorf("ssh private key path is empty and no default SSH key was found (tried: %s); set ssh.private_key_path", strings.Join(attempted, ", "))
+		}
+		keyPath = detectedKeyPath
 	}
 
 	connectTimeout := cfg.ConnectTimeout
@@ -63,6 +76,27 @@ func NewRunner(cfg Config) (*Runner, error) {
 		connectTimeout: connectTimeout,
 		retryInterval:  retryInterval,
 	}, nil
+}
+
+func detectPrivateKeyPath() (string, []string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", nil, fmt.Errorf("resolve home dir for ssh key detection: %w", err)
+	}
+
+	candidates := []string{"id_ed25519", "id_ecdsa", "id_rsa"}
+	attempted := make([]string, 0, len(candidates))
+	for _, name := range candidates {
+		candidate := filepath.Join(home, ".ssh", name)
+		attempted = append(attempted, candidate)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, attempted, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", attempted, fmt.Errorf("check ssh private key path %q: %w", candidate, err)
+		}
+	}
+
+	return "", attempted, nil
 }
 
 func (r *Runner) RunWithRetry(ctx context.Context, host, remoteCommand string, timeout time.Duration) (Result, error) {

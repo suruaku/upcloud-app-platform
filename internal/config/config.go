@@ -82,7 +82,6 @@ func (c *Config) Validate() error {
 	require("provision.cloud_init_path", c.Provision.CloudInitPath)
 	require("provision.hostname", c.Provision.Hostname)
 	require("ssh.user", c.SSH.User)
-	require("ssh.private_key_path", c.SSH.PrivateKeyPath)
 	require("deploy.container_name", c.Deploy.ContainerName)
 	require("deploy.image", c.Deploy.Image)
 	require("deploy.port", c.Deploy.Port)
@@ -123,7 +122,7 @@ func Default() Config {
 		},
 		SSH: SSHConfig{
 			User:                  "ubuntu",
-			PrivateKeyPath:        "~/.ssh/id_ed25519",
+			PrivateKeyPath:        "",
 			ConnectTimeoutSeconds: 120,
 		},
 		Deploy: DeployConfig{

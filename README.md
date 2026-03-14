@@ -31,8 +31,10 @@ export UPCLOUD_TOKEN="ucat_..."
 2) Initialize project files:
 
 ```bash
-upcloud-box init --ssh-key ~/.ssh/id_ed25519.pub
+upcloud-box init
 ```
+
+`upcloud-box init` auto-detects `~/.ssh/id_ed25519.pub`, then `~/.ssh/id_ecdsa.pub`, then `~/.ssh/id_rsa.pub` when `--ssh-key` is not provided.
 
 This creates:
 
@@ -84,7 +86,7 @@ Useful flags:
 
 - `initialize provider failed (auth)`: verify `UPCLOUD_TOKEN` is set and valid.
 - `... failed (quota)`: check UpCloud resource limits and selected zone capacity.
-- `post-provision checks failed (ssh)`: confirm `ssh.user`, `ssh.private_key_path`, and cloud-init user/key setup match.
+- `post-provision checks failed (ssh)`: confirm `ssh.user` and cloud-init user/key setup match. If `ssh.private_key_path` is empty, upcloud-box auto-detects `~/.ssh/id_ed25519`, then `~/.ssh/id_ecdsa`, then `~/.ssh/id_rsa`; if it is set to an invalid path, the command fails fast.
 - `deploy container failed (health)`: verify app startup, exposed port mapping, and `deploy.healthcheck_url`.
 - `status` shows server missing: run `upcloud-box up` to reprovision or `upcloud-box destroy --yes` to clean state.
 
