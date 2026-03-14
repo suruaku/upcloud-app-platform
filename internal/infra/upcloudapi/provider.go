@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -113,28 +114,86 @@ func (p *Provider) resolveTemplateUUID(ctx context.Context, zone string, templat
 		return template, nil
 	}
 
-	storages, err := p.svc.GetStorages(ctx, &request.GetStoragesRequest{
-		Access: upcloud.StorageAccessPublic,
-		Type:   upcloud.StorageTypeTemplate,
-	})
+	storages, err := p.svc.GetStorages(ctx, &request.GetStoragesRequest{})
 	if err != nil {
-		return "", fmt.Errorf("list public template storages: %w", err)
+		return "", fmt.Errorf("list storages: %w", err)
 	}
 
 	for _, s := range storages.Storages {
-		if s.Zone == zone && s.Title == template && s.State == upcloud.StorageStateOnline {
+		if s.Access == upcloud.StorageAccessPublic && s.Type == upcloud.StorageTypeTemplate && zoneMatchesTemplate(zone, s.Zone) && s.Title == template && s.State == upcloud.StorageStateOnline {
 			return s.UUID, nil
 		}
 	}
 
 	needle := strings.ToLower(template)
 	for _, s := range storages.Storages {
-		if s.Zone == zone && strings.Contains(strings.ToLower(s.Title), needle) && s.State == upcloud.StorageStateOnline {
+		if s.Access == upcloud.StorageAccessPublic && s.Type == upcloud.StorageTypeTemplate && zoneMatchesTemplate(zone, s.Zone) && strings.Contains(strings.ToLower(s.Title), needle) && s.State == upcloud.StorageStateOnline {
 			return s.UUID, nil
 		}
 	}
 
+	normalizedNeedle := normalizeTemplateName(template)
+	for _, s := range storages.Storages {
+		if s.Access != upcloud.StorageAccessPublic || s.Type != upcloud.StorageTypeTemplate || !zoneMatchesTemplate(zone, s.Zone) || s.State != upcloud.StorageStateOnline {
+			continue
+		}
+		normalizedTitle := normalizeTemplateName(s.Title)
+		if strings.Contains(normalizedTitle, normalizedNeedle) || strings.Contains(normalizedNeedle, normalizedTitle) {
+			return s.UUID, nil
+		}
+	}
+
+	matchingZones := collectMatchingTemplateZones(storages.Storages, normalizedNeedle)
+	if len(matchingZones) > 0 {
+		return "", fmt.Errorf("no storage template match found in zone %q for template %q; matching templates exist in zones: %s", zone, template, strings.Join(matchingZones, ", "))
+	}
+
 	return "", fmt.Errorf("no storage template match found in zone %q for template %q", zone, template)
+}
+
+func normalizeTemplateName(v string) string {
+	v = strings.ToLower(v)
+	v = strings.ReplaceAll(v, ".", " ")
+	v = strings.ReplaceAll(v, "-", " ")
+	v = strings.Join(strings.Fields(v), " ")
+	return strings.TrimSpace(v)
+}
+
+func collectMatchingTemplateZones(storages []upcloud.Storage, normalizedNeedle string) []string {
+	if normalizedNeedle == "" {
+		return nil
+	}
+
+	zones := make(map[string]struct{})
+	for _, s := range storages {
+		if s.Access != upcloud.StorageAccessPublic || s.Type != upcloud.StorageTypeTemplate || s.State != upcloud.StorageStateOnline {
+			continue
+		}
+		normalizedTitle := normalizeTemplateName(s.Title)
+		if strings.Contains(normalizedTitle, normalizedNeedle) || strings.Contains(normalizedNeedle, normalizedTitle) {
+			zoneLabel := strings.TrimSpace(s.Zone)
+			if zoneLabel == "" {
+				zoneLabel = "<all-zones>"
+			}
+			zones[zoneLabel] = struct{}{}
+		}
+	}
+
+	out := make([]string, 0, len(zones))
+	for zone := range zones {
+		out = append(out, zone)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func zoneMatchesTemplate(requestedZone, templateZone string) bool {
+	requestedZone = strings.TrimSpace(requestedZone)
+	templateZone = strings.TrimSpace(templateZone)
+	if templateZone == "" {
+		return true
+	}
+	return requestedZone == templateZone
 }
 
 func toServerInfo(details *upcloud.ServerDetails) infra.ServerInfo {

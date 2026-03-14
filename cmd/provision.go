@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/ikox01/upcloud-box/internal/config"
 	"github.com/ikox01/upcloud-box/internal/infra"
 	"github.com/ikox01/upcloud-box/internal/infra/factory"
+	sshrunner "github.com/ikox01/upcloud-box/internal/ssh"
 	"github.com/ikox01/upcloud-box/internal/state"
 	"github.com/spf13/cobra"
 )
@@ -70,6 +73,10 @@ var provisionCmd = &cobra.Command{
 			return err
 		}
 
+		if err := runPostProvisionChecks(cfg, serverInfo.PublicIPv4); err != nil {
+			return err
+		}
+
 		fmt.Printf("Provisioned server %s (%s)\n", serverInfo.ServerID, serverInfo.Hostname)
 		fmt.Printf("State: %s\n", serverInfo.State)
 		if serverInfo.PublicIPv4 != "" {
@@ -109,4 +116,36 @@ func loadOrInitState(path string) (*state.State, error) {
 		return &newState, nil
 	}
 	return nil, err
+}
+
+func runPostProvisionChecks(cfg *config.Config, host string) error {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return fmt.Errorf("post-provision checks require a public IPv4 address")
+	}
+
+	runner, err := sshrunner.NewRunner(sshrunner.Config{
+		User:           cfg.SSH.User,
+		PrivateKeyPath: cfg.SSH.PrivateKeyPath,
+		ConfigDir:      filepath.Dir(cfgFile),
+		ConnectTimeout: time.Duration(cfg.SSH.ConnectTimeoutSeconds) * time.Second,
+		RetryInterval:  3 * time.Second,
+	})
+	if err != nil {
+		return fmt.Errorf("create ssh runner: %w", err)
+	}
+
+	const checkTimeout = 5 * time.Minute
+
+	fmt.Println("Post-provision: waiting for SSH connectivity...")
+	if _, err := runner.RunWithRetry(context.Background(), host, "true", checkTimeout); err != nil {
+		return fmt.Errorf("post-provision ssh connectivity check failed: %w", err)
+	}
+
+	fmt.Println("Post-provision: waiting for docker daemon readiness...")
+	if _, err := runner.RunWithRetry(context.Background(), host, "docker info >/dev/null 2>&1", checkTimeout); err != nil {
+		return fmt.Errorf("post-provision docker check failed: %w", err)
+	}
+
+	return nil
 }
