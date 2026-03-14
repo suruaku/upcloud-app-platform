@@ -51,8 +51,6 @@ This document locks the v1 implementation plan for a Go + Cobra CLI that provisi
 project: "my-app"
 
 upcloud:
-  username: "UPCLOUD_API_USERNAME"
-  password: "UPCLOUD_API_PASSWORD"
   zone: "fi-hel1"
   plan: "1xCPU-2GB"
   template: "Ubuntu Server 24.04 LTS"
@@ -86,6 +84,14 @@ deploy:
   "last_deployed_at": ""
 }
 ```
+
+## Environment Variables
+
+```bash
+export UPCLOUD_TOKEN="ucat_..."
+```
+
+The CLI uses `UPCLOUD_TOKEN` for UpCloud API authentication.
 
 ## Suggested Go Package Layout
 

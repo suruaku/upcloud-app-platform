@@ -1,10 +1,20 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"os"
+	"strings"
+	"time"
 
+	"github.com/ikox01/upcloud-box/internal/infra"
+	"github.com/ikox01/upcloud-box/internal/infra/factory"
+	"github.com/ikox01/upcloud-box/internal/state"
 	"github.com/spf13/cobra"
 )
+
+var provisionWaitTimeout time.Duration
 
 var provisionCmd = &cobra.Command{
 	Use:   "provision",
@@ -15,12 +25,88 @@ var provisionCmd = &cobra.Command{
 			return err
 		}
 
-		_ = cfg
-		fmt.Println("TODO: provision server using", cfgFile)
+		cloudInitRaw, err := readCloudInitPassThrough(cfg.Provision.CloudInitPath)
+		if err != nil {
+			return err
+		}
+
+		s, err := loadOrInitState(state.DefaultPath)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(s.ServerUUID) != "" {
+			return fmt.Errorf("state already has server_uuid %q; destroy it first or clear %s", s.ServerUUID, state.DefaultPath)
+		}
+
+		provider, err := factory.NewDefaultProvider()
+		if err != nil {
+			return err
+		}
+
+		result, err := provider.Provision(context.Background(), infra.ProvisionRequest{
+			Zone:         cfg.UpCloud.Zone,
+			Plan:         cfg.UpCloud.Plan,
+			Template:     cfg.UpCloud.Template,
+			Hostname:     cfg.Provision.Hostname,
+			CloudInitRaw: cloudInitRaw,
+		})
+		if err != nil {
+			return err
+		}
+
+		s.ServerUUID = result.ServerID
+		s.PublicIP = ""
+		if err := state.Save(state.DefaultPath, *s); err != nil {
+			return err
+		}
+
+		serverInfo, err := provider.WaitReady(context.Background(), result.ServerID, provisionWaitTimeout)
+		if err != nil {
+			return err
+		}
+
+		s.PublicIP = serverInfo.PublicIPv4
+		if err := state.Save(state.DefaultPath, *s); err != nil {
+			return err
+		}
+
+		fmt.Printf("Provisioned server %s (%s)\n", serverInfo.ServerID, serverInfo.Hostname)
+		fmt.Printf("State: %s\n", serverInfo.State)
+		if serverInfo.PublicIPv4 != "" {
+			fmt.Printf("Public IPv4: %s\n", serverInfo.PublicIPv4)
+		}
+		fmt.Printf("State saved to %s\n", state.DefaultPath)
 		return nil
 	},
 }
 
 func init() {
+	provisionCmd.Flags().DurationVar(&provisionWaitTimeout, "wait-timeout", 10*time.Minute, "max time to wait for server to become started")
 	rootCmd.AddCommand(provisionCmd)
+}
+
+func readCloudInitPassThrough(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read cloud-init file %q: %w", path, err)
+	}
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return nil, fmt.Errorf("cloud-init file %q is empty", path)
+	}
+	return data, nil
+}
+
+func loadOrInitState(path string) (*state.State, error) {
+	s, err := state.Load(path)
+	if err == nil {
+		return s, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		newState := state.New()
+		if saveErr := state.Save(path, newState); saveErr != nil {
+			return nil, saveErr
+		}
+		return &newState, nil
+	}
+	return nil, err
 }

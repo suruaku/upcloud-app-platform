@@ -27,7 +27,7 @@ var initCmd = &cobra.Command{
 
 		fmt.Printf("Created %s\n", cfgFile)
 		fmt.Printf("Created %s\n", state.DefaultPath)
-		fmt.Println("Next: edit your config values, then run upcloud-box provision")
+		fmt.Println("Next: export UPCLOUD_TOKEN, edit your config values, then run upcloud-box provision")
 		return nil
 	},
 }

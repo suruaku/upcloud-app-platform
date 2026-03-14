@@ -19,8 +19,6 @@ type Config struct {
 }
 
 type UpCloudConfig struct {
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
 	Zone     string `yaml:"zone"`
 	Plan     string `yaml:"plan"`
 	Template string `yaml:"template"`
@@ -78,8 +76,6 @@ func (c *Config) Validate() error {
 	}
 
 	require("project", c.Project)
-	require("upcloud.username", c.UpCloud.Username)
-	require("upcloud.password", c.UpCloud.Password)
 	require("upcloud.zone", c.UpCloud.Zone)
 	require("upcloud.plan", c.UpCloud.Plan)
 	require("upcloud.template", c.UpCloud.Template)
@@ -117,8 +113,6 @@ func Default() Config {
 	return Config{
 		Project: "my-app",
 		UpCloud: UpCloudConfig{
-			Username: "UPCLOUD_API_USERNAME",
-			Password: "UPCLOUD_API_PASSWORD",
 			Zone:     "fi-hel1",
 			Plan:     "1xCPU-2GB",
 			Template: "Ubuntu Server 24.04 LTS",
