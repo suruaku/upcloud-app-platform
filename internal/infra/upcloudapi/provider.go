@@ -100,9 +100,55 @@ func (p *Provider) WaitReady(ctx context.Context, serverID string, timeout time.
 
 func (p *Provider) Destroy(ctx context.Context, serverID string) error {
 	if err := p.svc.DeleteServer(ctx, &request.DeleteServerRequest{UUID: serverID}); err != nil {
-		return fmt.Errorf("delete server %q: %w", serverID, err)
+		if !isDeleteWhileStartedError(err) {
+			return fmt.Errorf("delete server %q: %w", serverID, err)
+		}
+
+		if stopErr := p.stopBeforeDelete(ctx, serverID); stopErr != nil {
+			return fmt.Errorf("stop server %q before delete: %w", serverID, stopErr)
+		}
+
+		if retryErr := p.svc.DeleteServer(ctx, &request.DeleteServerRequest{UUID: serverID}); retryErr != nil {
+			return fmt.Errorf("delete server %q after stop: %w", serverID, retryErr)
+		}
 	}
 	return nil
+}
+
+func (p *Provider) stopBeforeDelete(ctx context.Context, serverID string) error {
+	_, err := p.svc.StopServer(ctx, &request.StopServerRequest{
+		UUID:     serverID,
+		StopType: upcloud.StopTypeHard,
+		Timeout:  5 * time.Minute,
+	})
+	if err != nil && !isAlreadyStoppedError(err) {
+		return err
+	}
+
+	_, err = p.svc.WaitForServerState(ctx, &request.WaitForServerStateRequest{
+		UUID:         serverID,
+		DesiredState: upcloud.ServerStateStopped,
+	})
+	if err != nil && !isLikelyNotFoundError(err) {
+		return err
+	}
+
+	return nil
+}
+
+func isDeleteWhileStartedError(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "server_state_illegal") && strings.Contains(msg, "state 'started'")
+}
+
+func isAlreadyStoppedError(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "server_state_illegal") && strings.Contains(msg, "state 'stopped'")
+}
+
+func isLikelyNotFoundError(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not found") || strings.Contains(msg, "status=404") || strings.Contains(msg, "status code 404")
 }
 
 func (p *Provider) resolveTemplateUUID(ctx context.Context, zone string, template string) (string, error) {
