@@ -21,6 +21,7 @@ import (
 var statsForNerds bool
 
 const statusRemoteCommandTimeout = 12 * time.Second
+const statusSSHProbeTimeout = 5 * time.Second
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
@@ -69,8 +70,27 @@ var statusCmd = &cobra.Command{
 		cfg, cfgErr := config.Load(cfgFile)
 
 		renderRemoteInfrastructureSummary(provider, cfg, cfgErr, s, serverInfo)
-		renderRemoteRuntimeSummary(s, serverInfo.PublicIPv4)
-		renderRemoteAppSummary(s, serverInfo.PublicIPv4)
+
+		runner, host, err := resolveRemoteRunnerAndHost(s, serverInfo.PublicIPv4)
+		if err != nil {
+			fmt.Printf("Runtime: skipped (%v)\n", err)
+			fmt.Printf("Remote app: skipped (%v)\n", err)
+			return nil
+		}
+
+		if _, err := runRemoteCommandWithTimeout(runner, host, "true", statusSSHProbeTimeout); err != nil {
+			if statsForNerds {
+				fmt.Printf("Runtime: skipped (ssh probe failed: %v)\n", err)
+				fmt.Printf("Remote app: skipped (ssh probe failed: %v)\n", err)
+			} else {
+				fmt.Println("Runtime: unavailable (ssh unreachable)")
+				fmt.Println("Remote app: unavailable (ssh unreachable)")
+			}
+			return nil
+		}
+
+		renderRemoteRuntimeSummary(runner, host)
+		renderRemoteAppSummary(runner, host, s)
 		return nil
 	},
 }
@@ -165,13 +185,7 @@ type remoteRuntimeStats struct {
 	RootDiskErr string
 }
 
-func renderRemoteRuntimeSummary(s *state.State, remoteIPv4 string) {
-	runner, host, err := resolveRemoteRunnerAndHost(s, remoteIPv4)
-	if err != nil {
-		fmt.Printf("Runtime: skipped (%v)\n", err)
-		return
-	}
-
+func renderRemoteRuntimeSummary(runner *sshrunner.Runner, host string) {
 	stats := collectRemoteRuntimeStats(runner, host)
 	if !statsForNerds {
 		fmt.Println("Runtime:")
@@ -251,13 +265,8 @@ func collectRemoteRuntimeStats(runner *sshrunner.Runner, host string) remoteRunt
 	return stats
 }
 
-func renderRemoteAppSummary(s *state.State, remoteIPv4 string) {
-	runner, host, err := resolveRemoteRunnerAndHost(s, remoteIPv4)
-	if err != nil {
-		fmt.Printf("Remote app: skipped (%v)\n", err)
-		return
-	}
-
+func renderRemoteAppSummary(runner *sshrunner.Runner, host string, s *state.State) {
+	var err error
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		fmt.Printf("Remote app: skipped (load config %q: %v)\n", cfgFile, err)
@@ -478,6 +487,12 @@ func runRemoteScript(runner *sshrunner.Runner, host, script string) (string, err
 
 func runRemoteCommand(runner *sshrunner.Runner, host, command string) (sshrunner.Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), statusRemoteCommandTimeout)
+	defer cancel()
+	return runner.Run(ctx, host, command)
+}
+
+func runRemoteCommandWithTimeout(runner *sshrunner.Runner, host, command string, timeout time.Duration) (sshrunner.Result, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	return runner.Run(ctx, host, command)
 }
